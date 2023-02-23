@@ -214,7 +214,6 @@ class TestConfigLoader:
         _write_yaml(tmp_path / _BASE_ENV / "catalog2.yml", data)
 
         conf = ConfigLoader(str(tmp_path))
-        conf.default_run_env = ""
         pattern = r"^Duplicate keys found in .*catalog2\.yml and\:\n\- .*catalog1\.yml\: .*\.\.\.$"
         with pytest.raises(ValueError, match=pattern):
             conf.get("**/catalog*")
@@ -385,7 +384,7 @@ class TestConfigLoader:
             [
                 "tar",
                 "--exclude=local/*.yml",
-                "-czf",
+                "-cf",
                 f"{tmp_path}/tar_conf.tar.gz",
                 f"--directory={str(tmp_path.parent)}",
                 f"{tmp_path.name}",
