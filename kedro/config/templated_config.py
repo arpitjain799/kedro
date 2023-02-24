@@ -2,6 +2,7 @@
 or more configuration files from specified paths, and format template strings
 with the values from the passed dictionary.
 """
+import mimetypes
 import re
 from copy import deepcopy
 from pathlib import Path
@@ -126,15 +127,17 @@ class TemplatedConfigLoader(AbstractConfigLoader):
             "logging": ["logging*", "logging*/**", "**/logging*"],
         }
         self.config_patterns.update(config_patterns or {})
-        if conf_source.endswith(".zip"):
-            self._protocol = "zip"
-            self._fs = fs.open_fs(f"{self._protocol}://{conf_source}")
-        elif conf_source.endswith("tar.gz"):
-            self._protocol = "tar"
-            self._fs = fs.open_fs(f"{self._protocol}://{conf_source}")
-        else:
+
+        file_mimetype, _ = mimetypes.guess_type(conf_source)
+        if not file_mimetype:
             self._protocol = "file"
             self._fs = fs.open_fs(conf_source)
+        else:
+            if file_mimetype == "application/x-tar":
+                self._protocol = "tar"
+            elif file_mimetype == "application/zip":
+                self._protocol = "zip"
+            self._fs = fs.open_fs(f"{self._protocol}://{conf_source}")
 
         super().__init__(
             conf_source=conf_source, env=env, runtime_params=runtime_params

@@ -2,6 +2,7 @@
 or more configuration files of yaml or json type from specified paths through OmegaConf.
 """
 import logging
+import mimetypes
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set  # noqa
 
@@ -108,15 +109,17 @@ class OmegaConfigLoader(AbstractConfigLoader):
         # In the first iteration of the OmegaConfigLoader we'll keep the resolver turned-off.
         # It's easier to introduce them step by step, but removing them would be a breaking change.
         self._clear_omegaconf_resolvers()
-        if conf_source.endswith(".zip"):
-            self._protocol = "zip"
-            self._fs = fs.open_fs(f"{self._protocol}://{conf_source}")
-        elif conf_source.endswith("tar.gz"):
-            self._protocol = "tar"
-            self._fs = fs.open_fs(f"{self._protocol}://{conf_source}")
-        else:
+
+        file_mimetype, _ = mimetypes.guess_type(conf_source)
+        if not file_mimetype:
             self._protocol = "file"
             self._fs = fs.open_fs(conf_source)
+        else:
+            if file_mimetype == "application/x-tar":
+                self._protocol = "tar"
+            elif file_mimetype == "application/zip":
+                self._protocol = "zip"
+            self._fs = fs.open_fs(f"{self._protocol}://{conf_source}")
 
         super().__init__(
             conf_source=conf_source,

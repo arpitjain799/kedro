@@ -143,7 +143,6 @@ def _load_config_file(
     import anyconfig  # pylint: disable=import-outside-toplevel
 
     try:
-        # Default to UTF-8, which is Python 3 default encoding, to decode the file
         yml = fs_file.open(str(config_file.as_posix()))
         parser = _extract_config_parser(config_file)
         _config_logger.debug("Loading config file: '%s'", config_file)
@@ -170,6 +169,7 @@ def _load_config_file(
 
 
 def _extract_config_parser(config_file):
+    """Extract parser needed to load config with `anyconfig` based on file extension."""
     parser = config_file.suffix.strip(".")
     return "yaml" if parser == "yml" else parser
 
