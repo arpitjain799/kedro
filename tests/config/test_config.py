@@ -1,6 +1,7 @@
 import configparser
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Dict
 
@@ -211,6 +212,7 @@ class TestConfigLoader:
         _write_yaml(tmp_path / _BASE_ENV / "catalog2.yml", data)
 
         conf = ConfigLoader(str(tmp_path))
+        conf.default_run_env = ""
         pattern = r"^Duplicate keys found in .*catalog2\.yml and\:\n\- .*catalog1\.yml\: .*\.\.\.$"
         with pytest.raises(ValueError, match=pattern):
             conf.get("**/catalog*")
@@ -371,3 +373,20 @@ class TestConfigLoader:
         conf["catalog"] = {"catalog_config": "something_new"}
 
         assert conf["catalog"] == {"catalog_config": "something_new"}
+
+    @use_config_dir
+    def test_load_config_from_tar_file(self, tmp_path):
+        subprocess.run(  # pylint: disable=subprocess-run-check
+            [
+                "tar",
+                "--exclude=local/*.yml",
+                "-czf",
+                f"{tmp_path}/tar_conf.tar.gz",
+                f"--directory={str(tmp_path.parent)}",
+                f"{tmp_path.name}",
+            ]
+        )
+
+        conf = ConfigLoader(conf_source=f"{tmp_path}/tar_conf.tar.gz")
+        catalog = conf["catalog"]
+        assert catalog["trains"]["type"] == "MemoryDataSet"

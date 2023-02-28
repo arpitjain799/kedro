@@ -2,11 +2,13 @@
 or more configuration files from specified paths, and format template strings
 with the values from the passed dictionary.
 """
+import mimetypes
 import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+import fsspec
 import jmespath
 
 from kedro.config import AbstractConfigLoader
@@ -126,6 +128,16 @@ class TemplatedConfigLoader(AbstractConfigLoader):
         }
         self.config_patterns.update(config_patterns or {})
 
+        file_mimetype, _ = mimetypes.guess_type(conf_source)
+        if not file_mimetype:
+            self._protocol = "file"
+        else:
+            if file_mimetype == "application/x-tar":
+                self._protocol = "tar"
+            elif file_mimetype == "application/zip":
+                self._protocol = "zip"
+        self._fs = fsspec.filesystem(protocol=self._protocol, fo=conf_source)
+
         super().__init__(
             conf_source=conf_source, env=env, runtime_params=runtime_params
         )
@@ -137,6 +149,7 @@ class TemplatedConfigLoader(AbstractConfigLoader):
                 conf_paths=self.conf_paths,
                 patterns=[globals_pattern],
                 ac_template=False,
+                fs_file=self._fs,
             )
             if globals_pattern
             else {}
@@ -182,15 +195,23 @@ class TemplatedConfigLoader(AbstractConfigLoader):
             ValueError: malformed config found.
         """
         config_raw = _get_config_from_patterns(
-            conf_paths=self.conf_paths, patterns=patterns, ac_template=True
+            conf_paths=self.conf_paths,
+            patterns=patterns,
+            ac_template=True,
+            fs_file=self._fs,
         )
         return _format_object(config_raw, self._config_mapping)
 
     def _build_conf_paths(self) -> Iterable[str]:
         run_env = self.env or self.default_run_env
+        if self._protocol == "file":
+            return [
+                str(Path(self.conf_source) / self.base_env),
+                str(Path(self.conf_source) / run_env),
+            ]
         return [
-            str(Path(self.conf_source) / self.base_env),
-            str(Path(self.conf_source) / run_env),
+            str(Path(self._fs.ls("")[0]) / self.base_env),
+            str(Path(self._fs.ls("")[0]) / run_env),
         ]
 
 
