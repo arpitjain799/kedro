@@ -149,7 +149,7 @@ class TemplatedConfigLoader(AbstractConfigLoader):
                 conf_paths=self.conf_paths,
                 patterns=[globals_pattern],
                 ac_template=False,
-                fs_file=self._fs,
+                fsspec_fs=self._fs,
             )
             if globals_pattern
             else {}
@@ -198,7 +198,7 @@ class TemplatedConfigLoader(AbstractConfigLoader):
             conf_paths=self.conf_paths,
             patterns=patterns,
             ac_template=True,
-            fs_file=self._fs,
+            fsspec_fs=self._fs,
         )
         return _format_object(config_raw, self._config_mapping)
 

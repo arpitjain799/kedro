@@ -921,6 +921,7 @@ class TestRunCommand:
             obj=fake_metadata,
         )
         assert result.exit_code == 0
+        rename("alternate_conf", "conf")
 
     def test_run_with_non_existent_conf_source(self, fake_project_cli, fake_metadata):
         # check that an error is thrown if target conf_source doesn't exist
@@ -935,6 +936,36 @@ class TestRunCommand:
             " does not exist."
         )
         assert expected_output in result.output
+
+    def test_run_with_tar_config(self, fake_project_cli, fake_metadata):
+        # check that Kedro runs with tar.gz config
+        subprocess.run(  # pylint: disable=subprocess-run-check
+            [
+                "tar",
+                "--exclude=local/*.yml",
+                "-czf",
+                "tar_conf.tar.gz",
+                "conf",
+            ]
+        )
+        result = CliRunner().invoke(
+            fake_project_cli,
+            ["run", "--conf-source", "tar_conf.tar.gz"],
+            obj=fake_metadata,
+        )
+        assert result.exit_code == 0
+
+    def test_run_with_zip_config(self, fake_project_cli, fake_metadata):
+        # check that Kedro runs with zip config
+        subprocess.run(  # pylint: disable=subprocess-run-check
+            ["zip", "-r", "zip_conf.zip", "conf"]
+        )
+        result = CliRunner().invoke(
+            fake_project_cli,
+            ["run", "--conf-source", "zip_conf.zip"],
+            obj=fake_metadata,
+        )
+        assert result.exit_code == 0
 
     # the following tests should be deleted in 0.19.0
 
@@ -1024,33 +1055,3 @@ class TestRunCommand:
             pipeline_name=None,
             namespace=None,
         )
-
-    def test_run_with_tar_config(self, fake_project_cli, fake_metadata):
-        # check that Kedro runs with tar.gz config
-        subprocess.run(  # pylint: disable=subprocess-run-check
-            [
-                "tar",
-                "--exclude=local/*.yml",
-                "-czf",
-                "tar_conf.tar.gz",
-                "alternate_conf",
-            ]
-        )
-        result = CliRunner().invoke(
-            fake_project_cli,
-            ["run", "--conf-source", "tar_conf.tar.gz"],
-            obj=fake_metadata,
-        )
-        assert result.exit_code == 0
-
-    def test_run_with_zip_config(self, fake_project_cli, fake_metadata):
-        # check that Kedro runs with zip config
-        subprocess.run(  # pylint: disable=subprocess-run-check
-            ["zip", "-r", "zip_conf.zip", "alternate_conf"]
-        )
-        result = CliRunner().invoke(
-            fake_project_cli,
-            ["run", "--conf-source", "zip_conf.zip"],
-            obj=fake_metadata,
-        )
-        assert result.exit_code == 0

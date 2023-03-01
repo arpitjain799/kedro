@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 from typing import Dict
 
@@ -502,3 +503,20 @@ class TestFormatObject:
         conf["catalog"] = {"catalog_config": "something_new"}
 
         assert conf["catalog"] == {"catalog_config": "something_new"}
+
+    @pytest.mark.usefixtures("proj_catalog_param")
+    def test_load_config_from_tar_file(self, tmp_path):
+        subprocess.run(  # pylint: disable=subprocess-run-check
+            [
+                "tar",
+                "--exclude=local/*.yml",
+                "-czf",
+                f"{tmp_path}/tar_conf.tar.gz",
+                f"--directory={str(tmp_path.parent)}",
+                f"{tmp_path.name}",
+            ]
+        )
+
+        conf = TemplatedConfigLoader(conf_source=f"{tmp_path}/tar_conf.tar.gz")
+        catalog = conf["catalog"]
+        assert catalog["trains"]["type"] == "MemoryDataSet"

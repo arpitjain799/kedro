@@ -141,7 +141,7 @@ class ConfigLoader(AbstractConfigLoader):
         return _get_config_from_patterns(
             conf_paths=self.conf_paths,
             patterns=list(patterns),
-            fs_file=self._fs,
+            fsspec_fs=self._fs,
         )
 
     def _build_conf_paths(self) -> Iterable[str]:

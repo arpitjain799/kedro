@@ -25,13 +25,11 @@ _config_logger = logging.getLogger(__name__)
 
 def _get_config_from_patterns(
     conf_paths: Iterable[str],
-    fs_file,
+    fsspec_fs,
     patterns: Iterable[str] = None,
     ac_template: bool = False,
     ac_context: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
-    # pylint: disable=too-many-arguments
-
     """Recursively scan for configuration files, load and merge them, and
     return them in the form of a config dictionary.
 
@@ -70,21 +68,21 @@ def _get_config_from_patterns(
     processed_files = set()  # type: Set[Path]
 
     for conf_path in conf_paths:
-        if not fs_file.isdir(conf_path):
+        if not fsspec_fs.isdir(Path(conf_path).as_posix()):
             raise ValueError(
                 f"Given configuration path either does not exist "
                 f"or is not a valid directory: {conf_path}"
             )
 
         config_filepaths = _lookup_config_filepaths(
-            Path(conf_path), patterns, processed_files, _config_logger, fs_file
+            Path(conf_path), patterns, processed_files, _config_logger, fsspec_fs
         )
         new_conf = _load_configs(
             conf_source=conf_path,
             config_filepaths=config_filepaths,
             ac_template=ac_template,
             ac_context=ac_context,
-            fs_file=fs_file,
+            fsspec_fs=fsspec_fs,
         )
 
         common_keys = config.keys() & new_conf.keys()
@@ -110,7 +108,7 @@ def _get_config_from_patterns(
 def _load_config_file(
     conf_source: str,
     config_file: Path,
-    fs_file,
+    fsspec_fs,
     ac_template: bool = False,
     ac_context: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
@@ -135,7 +133,7 @@ def _load_config_file(
 
     try:
         # Default to UTF-8, which is Python 3 default encoding, to decode the file
-        with fs_file.open(str(config_file.as_posix())) as open_config:
+        with fsspec_fs.open(str(config_file.as_posix())) as open_config:
             tmp_fo = io.StringIO(open_config.read().decode("utf8"))
             parser = _extract_config_parser(config_file)
 
@@ -174,7 +172,7 @@ def _load_configs(
     conf_source: str,
     config_filepaths: List[Path],
     ac_template: bool,
-    fs_file,
+    fsspec_fs,
     ac_context: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """Recursively load all configuration files, which satisfy
@@ -207,7 +205,7 @@ def _load_configs(
             config_filepath,
             ac_template=ac_template,
             ac_context=ac_context,
-            fs_file=fs_file,
+            fsspec_fs=fsspec_fs,
         )
         _check_duplicate_keys(seen_file_to_keys, config_filepath, single_config)
         seen_file_to_keys[config_filepath] = single_config.keys()
@@ -221,17 +219,17 @@ def _lookup_config_filepaths(
     patterns: Iterable[str],
     processed_files: Set[Path],
     logger: Any,
-    fs_file,
+    fsspec_fs,
 ) -> List[Path]:
 
     paths = [
         Path(each)
         for pattern in patterns
-        for each in fs_file.glob(f"{str(conf_path)}/{pattern}")
+        for each in fsspec_fs.glob(Path(f"{str(conf_path)}/{pattern}").as_posix())
     ]
 
     config_files_filtered = [
-        path for path in paths if _is_valid_config_path(path, fs_file)
+        path for path in paths if _is_valid_config_path(path, fsspec_fs)
     ]
     config_files = set(config_files_filtered)
 
@@ -245,11 +243,10 @@ def _lookup_config_filepaths(
     return sorted(config_files)
 
 
-def _is_valid_config_path(path, fs_file):
+def _is_valid_config_path(path, fsspec_fs):
     """Check if given path is a file path and file type is yaml or json."""
-    # posix_path = path.as_posix()
-    # return fs_file.isfile(str(posix_path)) and path.suffix in SUPPORTED_EXTENSIONS
-    return fs_file.isfile(path) and path.suffix in SUPPORTED_EXTENSIONS
+    posix_path = path.as_posix()
+    return fsspec_fs.isfile(str(posix_path)) and path.suffix in SUPPORTED_EXTENSIONS
 
 
 def _remove_duplicates(items: Iterable[str]):
