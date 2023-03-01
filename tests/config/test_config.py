@@ -200,7 +200,7 @@ class TestConfigLoader:
         conf_path.mkdir(parents=True, exist_ok=True)
         (conf_path / "catalog.yml").write_text("bad;config")
 
-        pattern = f"Couldn't load config file: {conf_path / 'catalog.yml'}"
+        pattern = f"Couldn't load config file: {Path(conf_path, 'catalog.yml').as_posix()}"
         with pytest.raises(BadConfigException, match=re.escape(pattern)):
             ConfigLoader(str(tmp_path)).get("catalog*.yml")
 
@@ -331,7 +331,10 @@ class TestConfigLoader:
 
         (conf_path / "catalog.yml").write_text(example_catalog)
 
-        msg = f"Invalid YAML file {conf_path / 'catalog.yml'}, unable to read line 3, position 10."
+        msg = (
+            f"Invalid YAML file {Path(conf_path, 'catalog.yml').as_posix()}, unable to read"
+            f" line 3, position 10."
+        )
         with pytest.raises(ParserError, match=re.escape(msg)):
             ConfigLoader(str(tmp_path)).get("catalog*.yml")
 
