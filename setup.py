@@ -163,7 +163,7 @@ setup(
     long_description=readme,
     long_description_content_type="text/markdown",
     url="https://github.com/kedro-org/kedro",
-    python_requires=">=3.7, <3.11",
+    python_requires=">=3.7, <3.12",
     packages=find_packages(exclude=["docs*", "tests*", "tools*", "features*"]),
     include_package_data=True,
     tests_require=test_requires,
