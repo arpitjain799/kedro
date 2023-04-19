@@ -382,14 +382,20 @@ class SparkDataSet(AbstractVersionedDataSet[DataFrame, DataFrame]):
         return SparkSession.builder.getOrCreate()
 
     def _load(self) -> DataFrame:
-        load_path = _strip_dbfs_prefix(self._fs_prefix + str(self._get_load_path()))
-        read_obj = self._get_spark().read
+        try:
+            load_path = _strip_dbfs_prefix(self._fs_prefix + str(self._get_load_path()))
+            spark_obj = self._get_spark()
+            read_obj = spark_obj.read
+        except Exception as exc:
+            raise Exception("Failed to get read obj", exc)
+            # Pass schema if defined
+        try:
+            if self._schema:
+                read_obj = read_obj.schema(self._schema)
 
-        # Pass schema if defined
-        if self._schema:
-            read_obj = read_obj.schema(self._schema)
-
-        return read_obj.load(load_path, self._file_format, **self._load_args)
+            return read_obj.load(load_path, self._file_format, **self._load_args)
+        except Exception as exc:
+            raise Exception("Failed to load dataset", exc)
 
     def _save(self, data: DataFrame) -> None:
         save_path = _strip_dbfs_prefix(self._fs_prefix + str(self._get_save_path()))

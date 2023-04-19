@@ -469,15 +469,18 @@ def run(
     with KedroSession.create(
         env=env, conf_source=conf_source, extra_params=params
     ) as session:
-        session.run(
-            tags=tag,
-            runner=runner(is_async=is_async),
-            node_names=node_names,
-            from_nodes=from_nodes,
-            to_nodes=to_nodes,
-            from_inputs=from_inputs,
-            to_outputs=to_outputs,
-            load_versions=load_version,
-            pipeline_name=pipeline,
-            namespace=namespace,
-        )
+        try:
+            session.run(
+                tags=tag,
+                runner=runner(is_async=is_async),
+                node_names=node_names,
+                from_nodes=from_nodes,
+                to_nodes=to_nodes,
+                from_inputs=from_inputs,
+                to_outputs=to_outputs,
+                load_versions=load_version,
+                pipeline_name=pipeline,
+                namespace=namespace,
+            )
+        except Exception as exc:
+            raise Exception("something has gone wrong", exc)

@@ -151,50 +151,53 @@ class KedroSession:
         Returns:
             A new ``KedroSession`` instance.
         """
-        validate_settings()
-
-        session = cls(
-            package_name=package_name,
-            project_path=project_path,
-            session_id=generate_timestamp(),
-            save_on_close=save_on_close,
-            conf_source=conf_source,
-        )
-
-        # have to explicitly type session_data otherwise mypy will complain
-        # possibly related to this: https://github.com/python/mypy/issues/1430
-        session_data: Dict[str, Any] = {
-            "package_name": session._package_name,
-            "project_path": session._project_path,
-            "session_id": session.session_id,
-        }
-
-        ctx = click.get_current_context(silent=True)
-        if ctx:
-            session_data["cli"] = _jsonify_cli_context(ctx)
-
-        env = env or os.getenv("KEDRO_ENV")
-        if env:
-            session_data["env"] = env
-
-        if extra_params:
-            session_data["extra_params"] = extra_params
-
         try:
-            session_data["username"] = getpass.getuser()
-        except Exception as exc:  # pylint: disable=broad-except
-            logging.getLogger(__name__).debug(
-                "Unable to get username. Full exception: %s", exc
+            validate_settings()
+
+            session = cls(
+                package_name=package_name,
+                project_path=project_path,
+                session_id=generate_timestamp(),
+                save_on_close=save_on_close,
+                conf_source=conf_source,
             )
 
-        session._store.update(session_data)
+            # have to explicitly type session_data otherwise mypy will complain
+            # possibly related to this: https://github.com/python/mypy/issues/1430
+            session_data: Dict[str, Any] = {
+                "package_name": session._package_name,
+                "project_path": session._project_path,
+                "session_id": session.session_id,
+            }
 
-        # We need ConfigLoader and env to setup logging correctly
-        session._setup_logging()
-        session_data.update(**_describe_git(session._project_path))
-        session._store.update(session_data)
+            ctx = click.get_current_context(silent=True)
+            if ctx:
+                session_data["cli"] = _jsonify_cli_context(ctx)
 
-        return session
+            env = env or os.getenv("KEDRO_ENV")
+            if env:
+                session_data["env"] = env
+
+            if extra_params:
+                session_data["extra_params"] = extra_params
+
+            try:
+                session_data["username"] = getpass.getuser()
+            except Exception as exc:  # pylint: disable=broad-except
+                logging.getLogger(__name__).debug(
+                    "Unable to get username. Full exception: %s", exc
+                )
+
+            session._store.update(session_data)
+
+            # We need ConfigLoader and env to setup logging correctly
+            session._setup_logging()
+            session_data.update(**_describe_git(session._project_path))
+            session._store.update(session_data)
+
+            return session
+        except Exception as exc:
+            raise Exception("Session creation failure", exc)
 
     def _get_logging_config(self) -> Dict[str, Any]:
         logging_config = self._get_config_loader()["logging"]
@@ -242,6 +245,7 @@ class KedroSession:
         type_ = [] if exc_type.__module__ == "builtins" else [exc_type.__module__]
         type_.append(exc_type.__qualname__)
 
+        logging.warning(f"EXCEPTION: {exc_value}")
         exc_data = {
             "type": ".".join(type_),
             "value": str(exc_value),
@@ -273,9 +277,12 @@ class KedroSession:
             extra_params=extra_params,
             hook_manager=self._hook_manager,
         )
-        self._hook_manager.hook.after_context_created(  # pylint: disable=no-member
-            context=context
-        )
+        try:
+            self._hook_manager.hook.after_context_created(  # pylint: disable=no-member
+                context=context
+            )
+        except Exception as exc:
+            raise exc
 
         return context
 
@@ -359,87 +366,90 @@ class KedroSession:
         # Report project name
         self._logger.info("Kedro project %s", self._project_path.name)
 
-        if self._run_called:
-            raise KedroSessionError(
-                "A run has already been completed as part of the"
-                " active KedroSession. KedroSession has a 1-1 mapping with"
-                " runs, and thus only one run should be executed per session."
+        try:
+            if self._run_called:
+                raise KedroSessionError(
+                    "A run has already been completed as part of the"
+                    " active KedroSession. KedroSession has a 1-1 mapping with"
+                    " runs, and thus only one run should be executed per session."
+                )
+
+            session_id = self.store["session_id"]
+            save_version = session_id
+            extra_params = self.store.get("extra_params") or {}
+            context = self.load_context()
+
+            name = pipeline_name or "__default__"
+
+            try:
+                pipeline = pipelines[name]
+            except KeyError as exc:
+                raise ValueError(
+                    f"Failed to find the pipeline named '{name}'. "
+                    f"It needs to be generated and returned "
+                    f"by the 'register_pipelines' function."
+                ) from exc
+
+            filtered_pipeline = pipeline.filter(
+                tags=tags,
+                from_nodes=from_nodes,
+                to_nodes=to_nodes,
+                node_names=node_names,
+                from_inputs=from_inputs,
+                to_outputs=to_outputs,
+                node_namespace=namespace,
             )
 
-        session_id = self.store["session_id"]
-        save_version = session_id
-        extra_params = self.store.get("extra_params") or {}
-        context = self.load_context()
+            record_data = {
+                "session_id": session_id,
+                "project_path": self._project_path.as_posix(),
+                "env": context.env,
+                "kedro_version": kedro_version,
+                "tags": tags,
+                "from_nodes": from_nodes,
+                "to_nodes": to_nodes,
+                "node_names": node_names,
+                "from_inputs": from_inputs,
+                "to_outputs": to_outputs,
+                "load_versions": load_versions,
+                "extra_params": extra_params,
+                "pipeline_name": pipeline_name,
+                "namespace": namespace,
+                "runner": getattr(runner, "__name__", str(runner)),
+            }
 
-        name = pipeline_name or "__default__"
-
-        try:
-            pipeline = pipelines[name]
-        except KeyError as exc:
-            raise ValueError(
-                f"Failed to find the pipeline named '{name}'. "
-                f"It needs to be generated and returned "
-                f"by the 'register_pipelines' function."
-            ) from exc
-
-        filtered_pipeline = pipeline.filter(
-            tags=tags,
-            from_nodes=from_nodes,
-            to_nodes=to_nodes,
-            node_names=node_names,
-            from_inputs=from_inputs,
-            to_outputs=to_outputs,
-            node_namespace=namespace,
-        )
-
-        record_data = {
-            "session_id": session_id,
-            "project_path": self._project_path.as_posix(),
-            "env": context.env,
-            "kedro_version": kedro_version,
-            "tags": tags,
-            "from_nodes": from_nodes,
-            "to_nodes": to_nodes,
-            "node_names": node_names,
-            "from_inputs": from_inputs,
-            "to_outputs": to_outputs,
-            "load_versions": load_versions,
-            "extra_params": extra_params,
-            "pipeline_name": pipeline_name,
-            "namespace": namespace,
-            "runner": getattr(runner, "__name__", str(runner)),
-        }
-
-        catalog = context._get_catalog(
-            save_version=save_version,
-            load_versions=load_versions,
-        )
-
-        # Run the runner
-        hook_manager = self._hook_manager
-        runner = runner or SequentialRunner()
-        hook_manager.hook.before_pipeline_run(  # pylint: disable=no-member
-            run_params=record_data, pipeline=filtered_pipeline, catalog=catalog
-        )
-
-        try:
-            run_result = runner.run(
-                filtered_pipeline, catalog, hook_manager, session_id
+            catalog = context._get_catalog(
+                save_version=save_version,
+                load_versions=load_versions,
             )
-            self._run_called = True
-        except Exception as error:
-            hook_manager.hook.on_pipeline_error(
-                error=error,
+
+            # Run the runner
+            hook_manager = self._hook_manager
+            runner = runner or SequentialRunner()
+            hook_manager.hook.before_pipeline_run(  # pylint: disable=no-member
+                run_params=record_data, pipeline=filtered_pipeline, catalog=catalog
+            )
+
+            try:
+                run_result = runner.run(
+                    filtered_pipeline, catalog, hook_manager, session_id
+                )
+                self._run_called = True
+            except Exception as error:
+                hook_manager.hook.on_pipeline_error(
+                    error=error,
+                    run_params=record_data,
+                    pipeline=filtered_pipeline,
+                    catalog=catalog,
+                )
+                raise
+
+            hook_manager.hook.after_pipeline_run(
                 run_params=record_data,
+                run_result=run_result,
                 pipeline=filtered_pipeline,
                 catalog=catalog,
             )
-            raise
-
-        hook_manager.hook.after_pipeline_run(
-            run_params=record_data,
-            run_result=run_result,
-            pipeline=filtered_pipeline,
-            catalog=catalog,
-        )
-        return run_result
+            return run_result
+        except Exception as exc:
+            raise Exception("Run failure", exc)
